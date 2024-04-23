@@ -129,7 +129,8 @@ vsg::ref_ptr<vsg::Object> assimp::Implementation::read(const vsg::Path& filename
         uint32_t flags = _importFlags;
         if (vsg::value<bool>(false, assimp::generate_smooth_normals, options))
         {
-            importer.SetPropertyFloat(AI_CONFIG_PP_CT_MAX_SMOOTHING_ANGLE, vsg::value<float>(80.0f, assimp::crease_angle, options));
+            ai_real crease_angle = vsg::value<float>(80.0f, assimp::crease_angle, options);
+            importer.SetPropertyFloat(AI_CONFIG_PP_CT_MAX_SMOOTHING_ANGLE, crease_angle);
             flags |= aiProcess_GenSmoothNormals;
         }
         else if (vsg::value<bool>(false, assimp::generate_sharp_normals, options))

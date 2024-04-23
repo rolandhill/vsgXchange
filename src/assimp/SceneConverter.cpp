@@ -626,10 +626,12 @@ void SceneConverter::convert(const aiMaterial* material, vsg::DescriptorConfigur
         material->Get(AI_MATKEY_SHADING_MODEL, shadingModel);
 
         unsigned int maxValue = 1;
-        float strength = 1.0f;
-        if (aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS, &mat.shininess, &maxValue) == AI_SUCCESS)
+        ai_real strength = 1.0f;
+        ai_real shininess;
+        if (aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS, &shininess, &maxValue) == AI_SUCCESS)
         {
             maxValue = 1;
+            mat.shininess = shininess;
             if (aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS_STRENGTH, &strength, &maxValue) == AI_SUCCESS)
                 mat.shininess *= strength;
         }
@@ -742,6 +744,8 @@ vsg::ref_ptr<vsg::Data> SceneConverter::createIndices(const aiMesh* mesh, unsign
 
 void SceneConverter::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
 {
+    bool aiDouble = sizeof(ai_real) == sizeof(double);
+
     if (convertedMaterials.size() <= mesh->mMaterialIndex)
     {
         vsg::warn("Warning:  mesh (", mesh, ") mesh->mMaterialIndex = ", mesh->mMaterialIndex, " exceeds available materials.size()= ", convertedMaterials.size());
@@ -827,13 +831,48 @@ void SceneConverter::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
 
     vsg::DataList vertexArrays;
     auto vertices = vsg::vec3Array::create(mesh->mNumVertices);
-    std::memcpy(vertices->dataPointer(), mesh->mVertices, mesh->mNumVertices * 12);
+
+    vsg::dvec3 centre;
+
+    if(aiDouble)
+    {
+        vsg::dbox bounds;
+
+        for(u_int32_t i = 0; i < mesh->mNumVertices; i++)
+        {
+            auto aiVert = mesh->mVertices[i];
+            bounds.add(aiVert.x, aiVert.y, aiVert.z);
+        }
+
+        centre = (bounds.min + bounds.max) * 0.5;
+
+        for(u_int32_t i = 0; i < mesh->mNumVertices; i++)
+        {
+            auto aiVert = mesh->mVertices[i];
+            vertices->at(i).set(aiVert.x - centre.x, aiVert.y - centre.y, aiVert.z - centre.z);
+        }
+    }
+    else
+    {
+        std::memcpy(vertices->dataPointer(), mesh->mVertices, mesh->mNumVertices * 12);
+    }
     config->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, vertices);
 
     if (mesh->mNormals)
     {
         auto normals = vsg::vec3Array::create(mesh->mNumVertices);
-        std::memcpy(normals->dataPointer(), mesh->mNormals, mesh->mNumVertices * 12);
+        if(aiDouble)
+        {
+            for(u_int32_t i = 0; i < mesh->mNumVertices; i++)
+            {
+                auto aiNormal = mesh->mNormals[i];
+                normals->at(i).set(aiNormal.x, aiNormal.y, aiNormal.z);
+            }
+        }
+        else
+        {
+            std::memcpy(normals->dataPointer(), mesh->mNormals, mesh->mNumVertices * 12);
+        }
         config->assignArray(vertexArrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, normals);
     }
     else
@@ -862,7 +901,18 @@ void SceneConverter::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
     if (mesh->mColors[0])
     {
         auto colors = vsg::vec4Array::create(mesh->mNumVertices);
-        std::memcpy(colors->dataPointer(), mesh->mColors[0], mesh->mNumVertices * 16);
+        if(aiDouble)
+        {
+            for(u_int32_t i = 0; i < mesh->mNumVertices; i++)
+            {
+                auto aiColor = mesh->mColors[0][i];
+                colors->at(i).set(aiColor.r, aiColor.g, aiColor.b, aiColor.a);
+            }
+        }
+        else
+        {
+            std::memcpy(colors->dataPointer(), mesh->mColors[0], mesh->mNumVertices * 16);
+        }
         config->assignArray(vertexArrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, colors);
     }
     else
@@ -905,7 +955,10 @@ void SceneConverter::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
             aiMatrix4x4 m = bone->mOffsetMatrix;
             m.Transpose();
 
-            jointSampler->offsetMatrices[i] = vsg::dmat4(vsg::mat4((float*)&m));
+            if(aiDouble)
+                jointSampler->offsetMatrices[i] = vsg::dmat4((double*)&m);
+            else
+                jointSampler->offsetMatrices[i] = vsg::dmat4(vsg::mat4((float*)&m));
 
             // vsg::info("    bone[", i, "], bone->mName = ", bone->mName.C_Str());
 
@@ -1003,7 +1056,16 @@ void SceneConverter::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
 
     config->copyTo(stateGroup, sharedObjects);
 
-    stateGroup->addChild(vid);
+    if(aiDouble)
+    {
+        auto transform = vsg::MatrixTransform::create(vsg::translate(centre));
+        transform->addChild(vid);
+        stateGroup->addChild(transform);
+    }
+    else
+    {
+        stateGroup->addChild(vid);
+    }
 
     if (material->blending)
     {
