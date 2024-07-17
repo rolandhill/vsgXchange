@@ -1590,8 +1590,7 @@ vsg::ref_ptr<vsg::MatrixTransform> SceneConverter::processCoordinateFrame(const 
     {
         source_coordinateConvention = itr->second;
     }
-
-    if (scene->mMetaData)
+    else if (scene->mMetaData)
     {
         int upAxis = 1;
         if (scene->mMetaData->Get("UpAxis", upAxis) == AI_SUCCESS)
