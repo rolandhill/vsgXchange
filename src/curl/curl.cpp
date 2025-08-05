@@ -47,14 +47,59 @@ namespace vsgXchange
         return {};
     }
 
-    vsg::Path getFileCachePath(const vsg::Path& fileCache, const vsg::Path& filename)
+    std::string extractValue(const std::string& str, const std::string& key)
     {
-        auto pos = filename.find("://");
-        if (pos != vsg::Path::npos)
+        auto pos = str.find(key);
+        if (pos != std::string::npos)
         {
-            return fileCache / filename.substr(pos + 3, vsg::Path::npos);
+            pos += key.length();
+            auto end_pos = str.find('&', pos);
+            if (end_pos == std::string::npos) end_pos = str.length();
+            return str.substr(pos, end_pos - pos);
         }
         return {};
+    }
+
+    vsg::Path getFileCacheNameGoogle(const vsg::Path& filename)
+    {
+        std::string str = filename.string();
+        auto start = str.find("://");
+        auto end = str.rfind('/');
+
+        vsg::Path filepath = str.substr(start + 3, end - start - 3); // Extract the part after "://"
+
+        auto lyrs = extractValue(str, "lyrs=");
+        auto z = extractValue(str, "z=");
+        auto x = extractValue(str, "x=");
+        auto y = extractValue(str, "y=");
+
+        x += ".png";
+
+        filepath = filepath / lyrs / z / y / x;
+
+        return filepath;
+    }
+
+    vsg::Path getFileCachePath(const vsg::Path& fileCache, const vsg::Path& filename)
+    {
+        std::string filepath;
+
+        auto str = filename.string();
+        auto lyrs_pos = str.find("google");
+        if(lyrs_pos != std::string::npos)
+        {
+            filepath = getFileCacheNameGoogle(filename);
+        }
+        else
+        {
+            auto pos = filename.find("://");
+            if (pos != vsg::Path::npos)
+            {
+                filepath = filename.substr(pos + 3, vsg::Path::npos);
+            }
+        }
+
+        return fileCache / filepath;
     }
 
     class curl::Implementation
@@ -106,11 +151,11 @@ vsg::ref_ptr<vsg::Object> curl::read(const vsg::Path& filename, vsg::ref_ptr<con
             {
                 auto local_options = vsg::clone(options);
 
-                local_options->paths.insert(local_options->paths.begin(), vsg::filePath(serverFilename));
+                local_options->paths.insert(local_options->paths.begin(), vsg::filePath(fileCachePath));
                 local_options->extensionHint = vsg::lowerCaseFileExtension(filename);
 
-                std::ifstream fin(fileCachePath, std::ios::in | std::ios::binary);
-                auto object = vsg::read(fin, local_options); // do we need to remove any http URL?
+                // std::ifstream fin(fileCachePath, std::ios::in | std::ios::binary);
+                auto object = vsg::read(fileCachePath, local_options); // do we need to remove any http URL?
                 if (object)
                 {
                     return object;
