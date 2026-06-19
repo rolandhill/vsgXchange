@@ -1005,7 +1005,32 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
 
         vsg::ref_ptr<vsg::Node> draw;
 
-        if (!vertexArrays.empty())
+        if (vertexArrays.empty())
+        {
+            if (meshExtras.meshlets)
+            {
+
+                // TODO: Need to map meshlets to GraphicsPipelineConfigurator
+                config->assignDescriptor("meshlets", meshExtras.meshlets);
+                config->assignDescriptor("meshlet_Bounds", meshExtras.meshletBounds);
+                config->assignDescriptor("meshlet_Vertices", meshExtras.meshletVertices);
+                config->assignDescriptor("meshlet_Triangles", meshExtras.meshletTriangles);
+
+                auto drawMeshTask = vsg::DrawMeshTasks::create(meshExtras.meshlets->valueCount(), instanceCount, 1);
+
+                vsg::info("meshExtras.meshlets->valueCount() = ", meshExtras.meshlets->valueCount(), ", instanceCount = ", instanceCount);
+
+                draw = drawMeshTask;
+            }
+            else
+            {
+                vsg::info("Need to handle no vertex assignment - assume mesh shader pipeline, BUT worse we have no meshlets to work from.");
+                auto drawMeshTask = vsg::DrawMeshTasks::create(2, 1, 1);
+                draw = drawMeshTask;
+            }
+
+        }
+        else
         {
 
             if (!meshExtras.instancedAttributes && instanceNodeHint != vsg::Options::INSTANCE_NONE)
@@ -1102,22 +1127,6 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
                 draw = vd;
             }
         }
-        else
-        {
-            if (meshExtras.meshlets)
-            {
-                vsg::info("Need to handle no vertex assignment - assume mesh shader pipeline, but we do at least have meshlets built. meshExtras.meshlets = ", meshExtras.meshlets, ", count = ", meshExtras.meshlets->valueCount());
-                auto drawMeshTask = vsg::DrawMeshTasks::create(meshExtras.meshlets->valueCount(), instanceCount, 1);
-                draw = drawMeshTask;
-            }
-            else
-            {
-                vsg::info("Need to handle no vertex assignment - assume mesh shader pipeline, BUT worse we have no meshlets to work from.");
-                auto drawMeshTask = vsg::DrawMeshTasks::create(0, 0, 0);
-                draw = drawMeshTask;
-            }
-
-        }
 
         // set the GraphicsPipelineStates to the required values.
         struct SetPipelineStates : public vsg::Visitor
@@ -1169,17 +1178,24 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
             }
             else
             {
-                vsg::ComputeBounds computeBounds;
-                draw->accept(computeBounds);
-                vsg::dvec3 center = (computeBounds.bounds.min + computeBounds.bounds.max) * 0.5;
-                double radius = vsg::length(computeBounds.bounds.max - computeBounds.bounds.min) * 0.5;
+                std::stack<vsg::dmat4> matrices; // to use computeBounds we need to pass in matrix stack.
+                auto bounds = computeBound(*gltf_mesh, meshExtras, matrices);
+                if (bounds)
+                {
+                    vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
+                    double radius = vsg::length(bounds.max - bounds.min) * 0.5;
 
-                auto depthSorted = vsg::DepthSorted::create();
-                depthSorted->binNumber = 10;
-                depthSorted->bound.set(center[0], center[1], center[2], radius);
-                depthSorted->child = stateGroup;
+                    auto depthSorted = vsg::DepthSorted::create();
+                    depthSorted->binNumber = 10;
+                    depthSorted->bound.set(center[0], center[1], center[2], radius);
+                    depthSorted->child = stateGroup;
 
-                nodes.push_back(depthSorted);
+                    nodes.push_back(depthSorted);
+                }
+                else
+                {
+                    nodes.push_back(stateGroup);
+                }
             }
         }
         else
@@ -1212,15 +1228,6 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
         vsg_mesh = group;
     }
 
-
-    if (meshExtras.meshlets)
-    {
-        // TODO: Need to map meshlets to GraphicsPipelineConfigurator
-        vsg_mesh->setObject("meshlets", meshExtras.meshlets);
-        vsg_mesh->setObject("meshletBounds", meshExtras.meshletBounds);
-        vsg_mesh->setObject("meshletVertices", meshExtras.meshletVertices);
-        vsg_mesh->setObject("meshletTriangles", meshExtras.meshletTriangles);
-    }
 
     assign_name_extras(*gltf_mesh, *vsg_mesh);
 
@@ -1998,6 +2005,125 @@ void gltf::Builder::flattenTransforms(gltf::Node& node, const vsg::dmat4& inheri
     }
 }
 
+
+vsg::dbox gltf::Builder::computeBound(gltf::Mesh& mesh, MeshExtras& meshExtras, std::stack<vsg::dmat4>& matrices)
+{
+    vsg::dbox bounds;
+    std::vector<vsg::dmat4> instanceMatrices;
+
+    for(auto& prim : mesh.primitives.values)
+    {
+        if (auto vertices = getAttribute<vsg::vec3Array>(prim->attributes, "POSITION"))
+        {
+            if (meshExtras.instancedAttributes)
+            {
+                auto translations = getAttribute<vsg::vec3Array>(*meshExtras.instancedAttributes, "TRANSLATION");
+                auto rotations = getAttribute<vsg::vec4Array>(*meshExtras.instancedAttributes, "ROTATION");
+                auto scales = getAttribute<vsg::vec3Array>(*meshExtras.instancedAttributes, "SCALE");
+
+                size_t instanceCount = 0;
+                if (translations) instanceCount = std::max(instanceCount, translations->size());
+                if (rotations) instanceCount = std::max(instanceCount, rotations->size());
+                if (scales) instanceCount = std::max(instanceCount, scales->size());
+
+                vsg::dmat4 parent;
+                if (!matrices.empty()) parent = matrices.top();
+
+                for(size_t i=0; i<instanceCount; ++i)
+                {
+                    vsg::dmat4 m = parent;
+                    if (translations && i < translations->size()) m = m * vsg::translate(vsg::dvec3(translations->at(i)));
+                    if (rotations && i < rotations->size()) { vsg::dvec4 v(rotations->at(i)); m = m * vsg::rotate(vsg::dquat(v.x, v.y, v.z, v.w)); }
+                    if (scales && i < scales->size()) m = m * vsg::scale(vsg::dvec3(scales->at(i)));
+
+                    for(auto& v : *vertices)
+                    {
+                        bounds.add(m * vsg::dvec3(v));
+                    }
+                }
+            }
+            else
+            {
+                if (matrices.empty())
+                {
+                    for(auto& v : *vertices)
+                    {
+                        bounds.add(v);
+                    }
+                }
+                else
+                {
+                    const auto& m = matrices.top();
+                    for(auto& v : *vertices)
+                    {
+                        bounds.add(m * vsg::dvec3(v));
+                    }
+                }
+            }
+        }
+    }
+
+    return bounds;
+}
+
+vsg::dbox gltf::Builder::computeBound(gltf::Node& gltf_node, std::stack<vsg::dmat4>& matrices)
+{
+    vsg::dmat4 transform;
+    bool has_transform = getTransform(gltf_node, transform);
+
+    if (has_transform)
+    {
+        if (matrices.empty()) matrices.push(transform);
+        else matrices.push(matrices.top() * transform);
+    }
+
+    vsg::dbox bounds;
+    if (gltf_node.mesh)
+    {
+        MeshExtras meshExtras;
+        if (gltf_node.skin)
+        {
+            meshExtras.jointSampler = vsg_skins[gltf_node.skin.value];
+        }
+
+        vsg::ref_ptr<vsg::Node> vsg_mesh;
+        if (gltf_node.mesh)
+        {
+            if (auto mesh_gpu_instancing = gltf_node.extension<EXT_mesh_gpu_instancing>("EXT_mesh_gpu_instancing"))
+            {
+                meshExtras.instancedAttributes = mesh_gpu_instancing->attributes;
+            }
+        }
+
+        auto mesh = model->meshes.values[gltf_node.mesh.value];
+
+        if (auto bb = computeBound(*(mesh), meshExtras, matrices)) bounds.add(bb);
+    }
+
+    for (auto& child : gltf_node.children.values)
+    {
+        if (auto bb = computeBound(*(model->nodes.values[child.value]), matrices)) bounds.add(bb);
+    }
+
+    if (has_transform) matrices.pop();
+
+    return bounds;
+}
+
+vsg::dbox gltf::Builder::computeBound(gltf::Scene& scene, std::stack<vsg::dmat4>& matrices)
+{
+    vsg::dbox bounds;
+    for(auto& id : scene.nodes.values)
+    {
+        if (id)
+        {
+            if (auto bb = computeBound(*(model->nodes.values[id.value]), matrices)) bounds.add(bb);
+        }
+    }
+    return bounds;
+}
+
+
 vsg::ref_ptr<vsg::Node> gltf::Builder::createScene(vsg::ref_ptr<gltf::Scene> gltf_scene, bool requiresRootTransformNode, const vsg::dmat4& rootTransform)
 {
     if (gltf_scene->nodes.values.empty())
@@ -2038,7 +2164,18 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createScene(vsg::ref_ptr<gltf::Scene> glt
     bool culling = vsg::value<bool>(true, gltf::culling, options) && (instanceNodeHint == vsg::Options::INSTANCE_NONE);
     if (culling)
     {
-        if (auto bounds = vsg::visit<vsg::ComputeBounds>(children).bounds)
+        // compute bounds from gltf data structures
+        std::stack<vsg::dmat4> matrices;
+        if (requiresRootTransformNode) matrices. push(rootTransform);
+        auto bounds = computeBound(*gltf_scene, matrices);
+
+        // fallback to using vsg::ComputeBounds visitor
+        if (!bounds)
+        {
+            bounds = vsg::visit<vsg::ComputeBounds>(children).bounds;
+        }
+
+        if (bounds)
         {
             vsg::dsphere bs((bounds.max + bounds.min) * 0.5, vsg::length(bounds.max - bounds.min) * 0.5);
             if (children.size() == 1)

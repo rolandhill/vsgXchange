@@ -32,6 +32,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <vsg/utils/GraphicsPipelineConfigurator.h>
 #include <vsgXchange/Version.h>
 
+#include <stack>
+
 namespace vsgXchange
 {
 
@@ -718,6 +720,16 @@ namespace vsgXchange
                 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN    // 6, TRIANGLE_FAN
             };
 
+            template<typename T>
+            vsg::ref_ptr<T> getAttribute(const gltf::Attributes& attributes, const std::string& name)
+            {
+                if (auto itr = attributes.values.find(name); itr != attributes.values.end())
+                {
+                    return vsg_accessors[itr->second.value].cast<T>();
+                }
+                else return {};
+            }
+
             virtual void assign_extras(ExtensionsExtras& src, vsg::Object& dest);
             virtual void assign_name_extras(NameExtensionsExtras& src, vsg::Object& dest);
 
@@ -728,6 +740,7 @@ namespace vsgXchange
             virtual bool getTransform(gltf::Node& node, vsg::dmat4& transform);
 
             virtual void optimizePrimtive(gltf::Primitive& primitive, MeshExtras& extras);
+
 
             virtual vsg::ref_ptr<vsg::Data> createBuffer(vsg::ref_ptr<gltf::Buffer> gltf_buffer);
             virtual vsg::ref_ptr<vsg::Data> createBufferView(vsg::ref_ptr<gltf::BufferView> gltf_bufferView);
@@ -748,6 +761,10 @@ namespace vsgXchange
 
             virtual vsg::ref_ptr<vsg::ShaderSet> getOrCreatePbrShaderSet();
             virtual vsg::ref_ptr<vsg::ShaderSet> getOrCreateFlatShaderSet();
+
+            virtual vsg::dbox computeBound(gltf::Mesh& mesh, MeshExtras& extras, std::stack<vsg::dmat4>& matrices);
+            virtual vsg::dbox computeBound(gltf::Node& node, std::stack<vsg::dmat4>& matrices);
+            virtual vsg::dbox computeBound(gltf::Scene& scene, std::stack<vsg::dmat4>& matrices);
 
             virtual vsg::ref_ptr<vsg::Object> createSceneGraph(vsg::ref_ptr<gltf::glTF> in_model, vsg::ref_ptr<const vsg::Options> in_options);
         };
