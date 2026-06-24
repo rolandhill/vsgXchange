@@ -2420,7 +2420,6 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
     build_meshlets = vsg::value<bool>(build_meshlets, gltf::build_meshlets, options);
     build_spatial_meshlets = vsg::value<bool>(build_spatial_meshlets, gltf::build_spatial_meshlets, options);
 
-
     // TODO: need to check that the glTF model is suitable for use of InstanceNode/InstanceDraw
 
     // vsg::info("gltf::Builder::createSceneGraph() instanceNodeHint = ", instanceNodeHint);
@@ -2444,6 +2443,15 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
         pbrMaterial.roughnessFactor = 0.0f;
 
         default_material->assignDescriptor("material", pbrMaterialValue);
+    }
+
+    uint32_t geometryHints = vsg::ShaderSet::NO_PREFERENCE;
+    if (flatShaderSet) geometryHints = geometryHints | flatShaderSet->geometryHints;
+    if (pbrShaderSet) geometryHints = geometryHints | pbrShaderSet->geometryHints;
+
+    if ((geometryHints & vsg::ShaderSet::MESHLETS) != 0)
+    {
+        build_meshlets = true;
     }
 
     for (size_t mi = 0; mi < model->meshes.values.size(); ++mi)
