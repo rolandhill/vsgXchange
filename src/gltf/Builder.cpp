@@ -830,6 +830,12 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
             vsg_material = default_material;
         }
 
+        if ((geometryHints & vsg::ShaderSet::MESHLETS) != 0)
+        {
+            // mesh shaders require mapping of vertex arrays to descriptors so we need to clone the DescriptorConfigurator so avoid accumulating array settings.
+            vsg_material = vsg::clone(vsg_material);
+        }
+
         auto config = vsg::GraphicsPipelineConfigurator::create(vsg_material->shaderSet);
         config->descriptorConfigurator = vsg_material;
         if (options) config->assignInheritedState(options->inheritedState);
@@ -1009,8 +1015,6 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
         {
             if (meshExtras.meshlets)
             {
-
-                // TODO: Need to map meshlets to GraphicsPipelineConfigurator
                 config->assignDescriptor("meshlets", meshExtras.meshlets);
                 config->assignDescriptor("meshlet_Bounds", meshExtras.meshletBounds);
                 config->assignDescriptor("meshlet_Vertices", meshExtras.meshletVertices);
@@ -1018,13 +1022,10 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
 
                 auto drawMeshTask = vsg::DrawMeshTasks::create(meshExtras.meshlets->valueCount(), instanceCount, 1);
 
-                vsg::info("meshExtras.meshlets->valueCount() = ", meshExtras.meshlets->valueCount(), ", instanceCount = ", instanceCount);
-
                 draw = drawMeshTask;
             }
             else
             {
-                vsg::info("Need to handle no vertex assignment - assume mesh shader pipeline, BUT worse we have no meshlets to work from.");
                 auto drawMeshTask = vsg::DrawMeshTasks::create(2, 1, 1);
                 draw = drawMeshTask;
             }
@@ -2445,7 +2446,7 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
         default_material->assignDescriptor("material", pbrMaterialValue);
     }
 
-    uint32_t geometryHints = vsg::ShaderSet::NO_PREFERENCE;
+    geometryHints = vsg::ShaderSet::NO_PREFERENCE;
     if (flatShaderSet) geometryHints = geometryHints | flatShaderSet->geometryHints;
     if (pbrShaderSet) geometryHints = geometryHints | pbrShaderSet->geometryHints;
 

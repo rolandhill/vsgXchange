@@ -667,6 +667,8 @@ namespace vsgXchange
 
             vsg::CoordinateConvention source_coordinateConvention = vsg::CoordinateConvention::Y_UP;
             int instanceNodeHint = vsg::Options::INSTANCE_NONE;
+            int geometryHints = vsg::ShaderSet::NO_PREFERENCE;
+
             bool cloneAccessors = false;
             float maxAnisotropy = 16.0f;
 
