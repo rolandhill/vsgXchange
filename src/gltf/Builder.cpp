@@ -1297,24 +1297,37 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
 
 
     std::map<std::string, vsg::ref_ptr<vsg::Data>> perVertexArrays;
-    auto registerPerVertexArray = [&](vsgXchange::gltf::Attributes& attrib, VkVertexInputRate vertexInputRate, const std::string& attribute_name) -> bool {
+    auto registerPerVertexArray = [&](vsgXchange::gltf::Attributes& attrib, VkVertexInputRate vertexInputRate, const std::string& attribute_name) -> vsg::ref_ptr<vsg::Data> {
 
-        if (vertexInputRate != VK_VERTEX_INPUT_RATE_VERTEX) return false;
+        if (vertexInputRate != VK_VERTEX_INPUT_RATE_VERTEX) return {};
 
         auto array_itr = attrib.values.find(attribute_name);
-        if (array_itr == attrib.values.end()) return false;
+        if (array_itr == attrib.values.end()) return {};
 
         if (array_itr->second.value >= vsg_accessors.size())
         {
             vsg::warn("gltf::Builder::createMesh() error in registerPerVertexArray( attrib, vertexIndexRate", attribute_name, "), array index out of range.");
-            return false;
+            return {};
         }
 
-        perVertexArrays[attribute_name] = vsg_accessors[array_itr->second.value];
-        return true;
+        return (perVertexArrays[attribute_name] = vsg_accessors[array_itr->second.value]);
     };
 
-    registerPerVertexArray(primitive.attributes, VK_VERTEX_INPUT_RATE_VERTEX, "POSITION");
+    if (auto data = registerPerVertexArray(primitive.attributes, VK_VERTEX_INPUT_RATE_VERTEX, "POSITION"))
+    {
+        if (data->valueSize()<12)
+        {
+            vsg::info("POSITION array incompatible with mesh_optimizer usage. data = ", data);
+            return;
+        }
+    }
+    else
+    {
+        vsg::info("gltf::Builder::optimizePrimtive() : No POSITION array available, incompatible with mesh_optimizer usage.");
+        return;
+    }
+
+
     registerPerVertexArray(primitive.attributes, VK_VERTEX_INPUT_RATE_VERTEX, "NORMAL");
     registerPerVertexArray(primitive.attributes, VK_VERTEX_INPUT_RATE_VERTEX, "TEXCOORD_0");
     registerPerVertexArray(primitive.attributes, VK_VERTEX_INPUT_RATE_VERTEX, "TEXCOORD_1");
@@ -1401,7 +1414,7 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
     }
     else
     {
-        vsg::info("creating indices");
+        vsg::debug("creating indices");
         original_indices.resize(vertexCount);
         for(uint32_t i=0; i<vertexCount; ++i)
         {
@@ -1440,7 +1453,7 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
         size_t size_after_filterIndexBuffer = meshopt_filterIndexBuffer(&remapped_indices[0], &remapped_indices[0], remapped_indices.size(), &final_vertexData[xPos], final_vertexData.size(), sizeof(float) * 3, vertexSize);
         if (size_after_filterIndexBuffer != remapped_indices.size())
         {
-            vsg::info("meshopt_filterIndexBuffer() before indices = ", remapped_indices.size(), ", after = ", size_after_filterIndexBuffer);
+            vsg::debug("meshopt_filterIndexBuffer() before indices = ", remapped_indices.size(), ", after = ", size_after_filterIndexBuffer);
             remapped_indices.resize(size_after_filterIndexBuffer);
         }
     }
@@ -1471,17 +1484,8 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
         indices = ushort_indices;
     }
 
-    if (primitive.indices)
-    {
-        vsg::debug("replaced indices ", indices);
-        vsg_accessors[primitive.indices.value] = indices;
-    }
-    else
-    {
-        primitive.indices.value = vsg_accessors.size();
-        vsg_accessors.push_back(indices);
-        vsg::debug("adding indices ", indices);
-    }
+    primitive.indices.value = vsg_accessors.size();
+    vsg_accessors.push_back(indices);
 
     struct CloneArray : public vsg::ConstVisitor
     {
@@ -1518,13 +1522,17 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
 
         if (new_array)
         {
+
             for(uint32_t i=0; i<totalRemappedVertices; ++i)
             {
+                // vsg::info("   ", i, " ", new_array->dataPointer(i), " base + i*vertexSize = ", base + i*vertexSize);
                 std::memcpy(new_array->dataPointer(i), &final_vertexData[base + i*vertexSize], new_array->valueSize());
             }
 
             auto array_itr = primitive.attributes.values.find(name);
-            vsg_accessors[array_itr->second.value] = new_array;
+
+            array_itr->second.value = vsg_accessors.size();
+            vsg_accessors.push_back(new_array);
         }
 
         base += array->valueSize();
