@@ -67,6 +67,11 @@ namespace vsgXchange
 
         static constexpr const char* build_meshlets = "build_meshlets";                 /// when available use meshoptimizer to build meshlets from vertex and triangle data
         static constexpr const char* build_spatial_meshlets = "build_spatial_meshlets"; /// when available use meshoptimizer to build meshlets using spatial metrics
+        static constexpr const char* meshlet_min_triangles = "meshlet_min_triangles";   /// uint32_t min_triangles target when building spatial meshlets
+        static constexpr const char* meshlet_max_triangles = "meshlet_max_triangles";   /// uint32_t max_triangles target when building meshlets
+        static constexpr const char* meshlet_max_vertices = "meshlet_max_vertices";     /// uint32_t max_vertices target when building meshlets
+        static constexpr const char* meshlet_fill_weight = "meshlet_fill_weight";       /// float fill_weight target when building meshlets
+        static constexpr const char* meshlet_cone_weight = "meshlet_cone_weight";       /// float cone_weight target when building meshlets
 
         static constexpr const char* prototype_builder = "gltf::Builder";   /// gltf::Builder prototype cloned for converting gltf::glTF hierachy into VSG scene graph
 
@@ -677,6 +682,11 @@ namespace vsgXchange
 
             bool build_meshlets = false;
             bool build_spatial_meshlets = false;
+            uint32_t meshlet_min_triangles = 16;
+            uint32_t meshlet_max_triangles = 256;
+            uint32_t meshlet_max_vertices = 256;
+            float meshlet_cone_weight = 0.0f;
+            float meshlet_fill_weight = 0.0f;
 
             vsg::ref_ptr<glTF> model;
 

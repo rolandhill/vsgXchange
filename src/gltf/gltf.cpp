@@ -1858,6 +1858,11 @@ bool gltf::readOptions(vsg::Options& options, vsg::CommandLine& arguments) const
 
     result = arguments.readAndAssign<bool>(gltf::build_meshlets, &options) || result;
     result = arguments.readAndAssign<bool>(gltf::build_spatial_meshlets, &options) || result;
+    result = arguments.readAndAssign<uint32_t>(gltf::meshlet_min_triangles, &options) || result;
+    result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_triangles, &options) || result;
+    result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_vertices, &options) || result;
+    result = arguments.readAndAssign<float>(gltf::meshlet_fill_weight, &options) || result;
+    result = arguments.readAndAssign<float>(gltf::meshlet_cone_weight, &options) || result;
 
     return result;
 }
@@ -1880,7 +1885,12 @@ bool gltf::getFeatures(Features& features) const
 
     features.optionNameTypeMap[gltf::build_meshlets] = vsg::type_name<bool>();
     features.optionNameTypeMap[gltf::build_spatial_meshlets] = vsg::type_name<bool>();
-    #endif
+    features.optionNameTypeMap[gltf::meshlet_min_triangles] = vsg::type_name<uint32_t>();
+    features.optionNameTypeMap[gltf::meshlet_max_triangles] = vsg::type_name<uint32_t>();
+    features.optionNameTypeMap[gltf::meshlet_max_vertices] = vsg::type_name<uint32_t>();
+    features.optionNameTypeMap[gltf::meshlet_fill_weight] = vsg::type_name<float>();
+    features.optionNameTypeMap[gltf::meshlet_cone_weight] = vsg::type_name<float>();
+#endif
 
     return true;
 }

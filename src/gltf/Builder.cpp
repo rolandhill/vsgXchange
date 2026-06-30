@@ -1554,28 +1554,19 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
 
         if (build_spatial_meshlets)
         {
-            const size_t max_vertices = 256;
-            const size_t min_triangles = 16;
-            const size_t max_triangles = 256; // note: in v0.25 or prior, max_triangles needs to be divisible by 4
-            const float fill_weight = 0.0f;
-
-            max_meshlets = meshopt_buildMeshletsBound(remapped_indices.size(), max_vertices, min_triangles);
+            max_meshlets = meshopt_buildMeshletsBound(remapped_indices.size(), meshlet_max_vertices, meshlet_min_triangles);
             meshlets.resize(max_meshlets);
 
             meshlet_count = meshopt_buildMeshletsSpatial(meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), remapped_indices.data(),
-                                                         remapped_indices.size(), reinterpret_cast<float*>(&final_vertexData[xPos]), final_vertexData.size(), vertexSize, max_vertices, min_triangles, max_triangles, fill_weight);
+                                                         remapped_indices.size(), reinterpret_cast<float*>(&final_vertexData[xPos]), final_vertexData.size(), vertexSize, meshlet_max_vertices, meshlet_min_triangles, meshlet_max_triangles, meshlet_fill_weight);
         }
         else
         {
-            const size_t max_vertices = 256;
-            const size_t max_triangles = 256; // note: in v0.25 or prior, max_triangles needs to be divisible by 4
-            const float cone_weight = 0.0f;
-
-            max_meshlets = meshopt_buildMeshletsBound(remapped_indices.size(), max_vertices, max_triangles);
+            max_meshlets = meshopt_buildMeshletsBound(remapped_indices.size(), meshlet_max_vertices, meshlet_max_triangles);
             meshlets.resize(max_meshlets);
 
             meshlet_count = meshopt_buildMeshlets(meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), remapped_indices.data(),
-                                                  remapped_indices.size(), reinterpret_cast<float*>(&final_vertexData[xPos]), final_vertexData.size(), vertexSize, max_vertices, max_triangles, cone_weight);
+                                                  remapped_indices.size(), reinterpret_cast<float*>(&final_vertexData[xPos]), final_vertexData.size(), vertexSize, meshlet_max_vertices, meshlet_max_triangles, meshlet_cone_weight);
         }
 
         if (meshlet_count > 0)
@@ -2432,6 +2423,12 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
 
     build_meshlets = vsg::value<bool>(build_meshlets, gltf::build_meshlets, options);
     build_spatial_meshlets = vsg::value<bool>(build_spatial_meshlets, gltf::build_spatial_meshlets, options);
+    meshlet_min_triangles = vsg::value<uint32_t>(meshlet_min_triangles, gltf::meshlet_min_triangles, options);
+    meshlet_max_triangles = vsg::value<uint32_t>(meshlet_max_triangles, gltf::meshlet_max_triangles, options);
+    meshlet_max_vertices = vsg::value<uint32_t>(meshlet_max_vertices, gltf::meshlet_max_vertices, options);
+    meshlet_cone_weight = vsg::value<float>(meshlet_cone_weight, gltf::meshlet_cone_weight, options);
+    meshlet_fill_weight = vsg::value<float>(meshlet_fill_weight, gltf::meshlet_fill_weight, options);
+
 
     // TODO: need to check that the glTF model is suitable for use of InstanceNode/InstanceDraw
 
