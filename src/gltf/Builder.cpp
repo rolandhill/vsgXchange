@@ -1495,22 +1495,22 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
         CloneArray(uint32_t c) : count(c) {}
 
         void apply(const vsg::Object& object) override { vsg::info("CloneArray::apply(", object.className(), ") not supported"); }
-        void apply(const vsg::floatArray& array) override { data = vsg::floatArray::create(count, array.properties); }
-        void apply(const vsg::vec2Array& array) override { data = vsg::vec2Array::create(count, array.properties); }
-        void apply(const vsg::vec3Array& array) override { data = vsg::vec3Array::create(count, array.properties); }
-        void apply(const vsg::bvec3Array& array) override { data = vsg::bvec3Array::create(count, array.properties); }
-        void apply(const vsg::ubvec3Array& array) override { data = vsg::ubvec3Array::create(count, array.properties); }
-        void apply(const vsg::svec3Array& array) override { data = vsg::svec3Array::create(count, array.properties); }
-        void apply(const vsg::usvec3Array& array) override { data = vsg::usvec3Array::create(count, array.properties); }
-        void apply(const vsg::ivec3Array& array) override { data = vsg::ivec3Array::create(count, array.properties); }
-        void apply(const vsg::uivec3Array& array) override { data = vsg::uivec3Array::create(count, array.properties); }
-        void apply(const vsg::vec4Array& array) override { data = vsg::vec4Array::create(count, array.properties); }
-        void apply(const vsg::bvec4Array& array) override { data = vsg::bvec4Array::create(count, array.properties); }
-        void apply(const vsg::ubvec4Array& array) override { data = vsg::ubvec4Array::create(count, array.properties); }
-        void apply(const vsg::svec4Array& array) override { data = vsg::svec4Array::create(count, array.properties); }
-        void apply(const vsg::usvec4Array& array) override { data = vsg::usvec4Array::create(count, array.properties); }
-        void apply(const vsg::ivec4Array& array) override { data = vsg::ivec4Array::create(count, array.properties); }
-        void apply(const vsg::uivec4Array& array) override { data = vsg::uivec4Array::create(count, array.properties); }
+        void apply(const vsg::floatArray& array) override { data = vsg::floatArray::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::vec2Array& array) override { data = vsg::vec2Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::vec3Array& array) override { data = vsg::vec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::bvec3Array& array) override { data = vsg::bvec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::ubvec3Array& array) override { data = vsg::ubvec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::svec3Array& array) override { data = vsg::svec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::usvec3Array& array) override { data = vsg::usvec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::ivec3Array& array) override { data = vsg::ivec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::uivec3Array& array) override { data = vsg::uivec3Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::vec4Array& array) override { data = vsg::vec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::bvec4Array& array) override { data = vsg::bvec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::ubvec4Array& array) override { data = vsg::ubvec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::svec4Array& array) override { data = vsg::svec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::usvec4Array& array) override { data = vsg::usvec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::ivec4Array& array) override { data = vsg::ivec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
+        void apply(const vsg::uivec4Array& array) override { data = vsg::uivec4Array::create(count, vsg::Data::Properties{array.properties.format}); }
     } cloneArray(totalRemappedVertices);
 
     // replace vertices
@@ -1522,11 +1522,15 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
 
         if (new_array)
         {
+            const uint8_t* src = &final_vertexData[base];
+            uint8_t* dest = static_cast<uint8_t*>(new_array->dataPointer());
+            size_t dest_stride = new_array->properties.stride;
 
             for(uint32_t i=0; i<totalRemappedVertices; ++i)
             {
-                // vsg::info("   ", i, " ", new_array->dataPointer(i), " base + i*vertexSize = ", base + i*vertexSize);
-                std::memcpy(new_array->dataPointer(i), &final_vertexData[base + i*vertexSize], new_array->valueSize());
+                std::memcpy(dest, src, dest_stride);
+                dest += dest_stride;
+                src += vertexSize;
             }
 
             auto array_itr = primitive.attributes.values.find(name);
