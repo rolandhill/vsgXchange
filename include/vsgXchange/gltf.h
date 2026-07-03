@@ -683,8 +683,8 @@ namespace vsgXchange
             bool build_meshlets = false;
             bool build_spatial_meshlets = false;
             uint32_t meshlet_min_triangles = 16;
-            uint32_t meshlet_max_triangles = 256;
-            uint32_t meshlet_max_vertices = 256;
+            uint32_t meshlet_max_triangles = 126; // recommendation for NVidia
+            uint32_t meshlet_max_vertices = 64; // recommendation for NVidia
             float meshlet_cone_weight = 0.0f;
             float meshlet_fill_weight = 0.0f;
 
