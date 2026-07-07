@@ -1015,18 +1015,53 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
         {
             if (meshExtras.meshlets)
             {
+                vsg::uivec4 meshlet_Count(0, 0, 0, 0);
+                meshlet_Count[0] = meshExtras.meshlets->valueCount();
                 config->assignDescriptor("meshlets", meshExtras.meshlets);
-                config->assignDescriptor("meshlet_Bounds", meshExtras.meshletBounds);
-                config->assignDescriptor("meshlet_Vertices", meshExtras.meshletVertices);
-                config->assignDescriptor("meshlet_Triangles", meshExtras.meshletTriangles);
 
-                auto drawMeshTask = vsg::DrawMeshTasks::create(meshExtras.meshlets->valueCount(), instanceCount, 1);
+                if (meshExtras.meshletVertices)
+                {
+                    meshlet_Count[1] = meshExtras.meshletVertices->valueCount();
+                    config->assignDescriptor("meshlet_Vertices", meshExtras.meshletVertices);
+                }
+
+                if (meshExtras.meshletTriangles)
+                {
+                    meshlet_Count[2] = meshExtras.meshletTriangles->valueCount();
+                    config->assignDescriptor("meshlet_Triangles", meshExtras.meshletTriangles);
+                }
+
+                if (meshExtras.meshletBounds)
+                {
+                    meshlet_Count[3] = meshExtras.meshletBounds->valueCount();
+                    config->assignDescriptor("meshlet_Bounds", meshExtras.meshletBounds);
+                }
+
+                config->assignDescriptor("meshlet_Count", vsg::uivec4Value::create(meshlet_Count));
+
+                uint32_t meshletsPerTask = 1;
+
+                // implement temporary fix for task shaders being able to process multiple meshlets at one time
+                // will need to come up with a mechanism for setting this meshletsPerTask value, potentially at runtime.
+                for(auto& shaderStage : config->shaderSet->stages)
+                {
+                    if ((shaderStage->stage & VK_SHADER_STAGE_TASK_BIT_EXT) != 0)
+                    {
+                        // TODO: need to query default from ShaderSet's defines or GLSL headers.
+                        meshletsPerTask = 32;
+                        break;
+                    }
+                }
+
+                uint32_t meshletTaskCount = (meshlet_Count[0]+meshletsPerTask-1)/meshletsPerTask;
+
+                auto drawMeshTask = vsg::DrawMeshTasks::create(meshletTaskCount, instanceCount, 1);
 
                 draw = drawMeshTask;
             }
             else
             {
-                auto drawMeshTask = vsg::DrawMeshTasks::create(2, 1, 1);
+                auto drawMeshTask = vsg::DrawMeshTasks::create(1, 1, 1);
                 draw = drawMeshTask;
             }
 
