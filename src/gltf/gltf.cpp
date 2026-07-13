@@ -1862,7 +1862,8 @@ bool gltf::readOptions(vsg::Options& options, vsg::CommandLine& arguments) const
     result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_triangles, &options) || result;
     result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_vertices, &options) || result;
     result = arguments.readAndAssign<float>(gltf::meshlet_fill_weight, &options) || result;
-    result = arguments.readAndAssign<float>(gltf::meshlet_cone_weight, &options) || result;
+
+    result = arguments.readAndAssign<bool>(gltf::packed_vertices, &options) || result;
 
     return result;
 }
@@ -1890,6 +1891,7 @@ bool gltf::getFeatures(Features& features) const
     features.optionNameTypeMap[gltf::meshlet_max_vertices] = vsg::type_name<uint32_t>();
     features.optionNameTypeMap[gltf::meshlet_fill_weight] = vsg::type_name<float>();
     features.optionNameTypeMap[gltf::meshlet_cone_weight] = vsg::type_name<float>();
+    features.optionNameTypeMap[gltf::packed_vertices] = vsg::type_name<bool>();
 #endif
 
     return true;

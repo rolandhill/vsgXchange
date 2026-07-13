@@ -72,6 +72,7 @@ namespace vsgXchange
         static constexpr const char* meshlet_max_vertices = "meshlet_max_vertices";     /// uint32_t max_vertices target when building meshlets
         static constexpr const char* meshlet_fill_weight = "meshlet_fill_weight";       /// float fill_weight target when building meshlets
         static constexpr const char* meshlet_cone_weight = "meshlet_cone_weight";       /// float cone_weight target when building meshlets
+        static constexpr const char* packed_vertices = "packed_vertices";               /// pack vertex, normal and texcoord data into interleaved arrays.
 
         static constexpr const char* prototype_builder = "gltf::Builder";   /// gltf::Builder prototype cloned for converting gltf::glTF hierachy into VSG scene graph
 
@@ -687,6 +688,7 @@ namespace vsgXchange
             uint32_t meshlet_max_vertices = 64; // recommendation for NVidia
             float meshlet_cone_weight = 0.0f;
             float meshlet_fill_weight = 0.0f;
+            bool packed_vertices = false;
 
             vsg::ref_ptr<glTF> model;
 
@@ -711,10 +713,14 @@ namespace vsgXchange
                 vsg::ref_ptr<gltf::Attributes> instancedAttributes;
                 vsg::ref_ptr<vsg::JointSampler> jointSampler;
 
+                vsg::box meshBounds;
+                vsg::vec4 texcoordExtents;
+
                 vsg::ref_ptr<vsg::uivec4Array> meshlets;
                 vsg::ref_ptr<vsg::uintArray> meshletVertices;
                 vsg::ref_ptr<vsg::ubyteArray> meshletTriangles;
                 vsg::ref_ptr<vsg::vec4Array> meshletBounds;
+                vsg::ref_ptr<vsg::Data> packedData;
             };
 
             vsg::ref_ptr<vsg::DescriptorConfigurator> default_material;
