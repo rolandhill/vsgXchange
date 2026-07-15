@@ -32,6 +32,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <vsg/utils/GraphicsPipelineConfigurator.h>
 #include <vsgXchange/Version.h>
 
+#include <stack>
+
 namespace vsgXchange
 {
 
@@ -54,11 +56,24 @@ namespace vsgXchange
 
         bool getFeatures(Features& features) const override;
 
-        static constexpr const char* report = "report";                     /// bool, report parsed glTF to console, defaults to false
-        static constexpr const char* culling = "culling";                   /// bool, insert cull nodes, defaults to true
-        static constexpr const char* disable_gltf = "disable_gltf";         /// bool, disable vsgXchange::gltf so vsgXchange::assimp will be used instead, defaults to false
-        static constexpr const char* clone_accessors = "clone_accessors";   /// bool, hint to clone the data associated with accessors, defaults to false
-        static constexpr const char* maxAnisotropy = "maxAnisotropy";       /// float, default setting of vsg::Sampler::maxAnisotropy to use.
+        static constexpr const char* report = "report";                                 /// bool, report parsed glTF to console, defaults to false
+        static constexpr const char* culling = "culling";                               /// bool, insert cull nodes, defaults to true
+        static constexpr const char* disable_gltf = "disable_gltf";                     /// bool, disable vsgXchange::gltf so vsgXchange::assimp will be used instead, defaults to false
+        static constexpr const char* clone_accessors = "clone_accessors";               /// bool, hint to clone the data associated with accessors, defaults to false
+        static constexpr const char* maxAnisotropy = "maxAnisotropy";                   /// float, default setting of vsg::Sampler::maxAnisotropy to use
+
+        static constexpr const char* optimize_mesh = "optimize_mesh";                   /// when available use meshoptimizer to remove duplicate mesh vertices, degenerate and duplicate triangles and optimize GPU cache usage
+        static constexpr const char* quantization = "quantization";                     /// when optmizing mesh quantize the vertex, normal and tecoord data to specified value
+
+        static constexpr const char* build_meshlets = "build_meshlets";                 /// when available use meshoptimizer to build meshlets from vertex and triangle data
+        static constexpr const char* build_spatial_meshlets = "build_spatial_meshlets"; /// when available use meshoptimizer to build meshlets using spatial metrics
+        static constexpr const char* meshlet_min_triangles = "meshlet_min_triangles";   /// uint32_t min_triangles target when building spatial meshlets
+        static constexpr const char* meshlet_max_triangles = "meshlet_max_triangles";   /// uint32_t max_triangles target when building meshlets
+        static constexpr const char* meshlet_max_vertices = "meshlet_max_vertices";     /// uint32_t max_vertices target when building meshlets
+        static constexpr const char* meshlet_fill_weight = "meshlet_fill_weight";       /// float fill_weight target when building meshlets
+        static constexpr const char* meshlet_cone_weight = "meshlet_cone_weight";       /// float cone_weight target when building meshlets
+        static constexpr const char* packed_vertices = "packed_vertices";               /// pack vertex, normal and texcoord data into interleaved arrays.
+
         static constexpr const char* prototype_builder = "gltf::Builder";   /// gltf::Builder prototype cloned for converting gltf::glTF hierachy into VSG scene graph
 
         bool readOptions(vsg::Options& options, vsg::CommandLine& arguments) const override;
@@ -658,8 +673,22 @@ namespace vsgXchange
 
             vsg::CoordinateConvention source_coordinateConvention = vsg::CoordinateConvention::Y_UP;
             int instanceNodeHint = vsg::Options::INSTANCE_NONE;
+            int geometryHints = vsg::ShaderSet::NO_PREFERENCE;
+
             bool cloneAccessors = false;
             float maxAnisotropy = 16.0f;
+
+            bool optimize_mesh = false;
+            float quantization = 1.0e-5f;
+
+            bool build_meshlets = false;
+            bool build_spatial_meshlets = false;
+            uint32_t meshlet_min_triangles = 16;
+            uint32_t meshlet_max_triangles = 126; // recommendation for NVidia
+            uint32_t meshlet_max_vertices = 64; // recommendation for NVidia
+            float meshlet_cone_weight = 0.0f;
+            float meshlet_fill_weight = 0.0f;
+            bool packed_vertices = false;
 
             vsg::ref_ptr<glTF> model;
 
@@ -683,12 +712,41 @@ namespace vsgXchange
             {
                 vsg::ref_ptr<gltf::Attributes> instancedAttributes;
                 vsg::ref_ptr<vsg::JointSampler> jointSampler;
+
+                vsg::box meshBounds;
+                vsg::vec4 texcoordExtents;
+
+                vsg::ref_ptr<vsg::uivec4Array> meshlets;
+                vsg::ref_ptr<vsg::uintArray> meshletVertices;
+                vsg::ref_ptr<vsg::ubyteArray> meshletTriangles;
+                vsg::ref_ptr<vsg::vec4Array> meshletBounds;
+                vsg::ref_ptr<vsg::Data> packedData;
             };
 
             vsg::ref_ptr<vsg::DescriptorConfigurator> default_material;
 
             // map used to map gltf attribute names to ShaderSet vertex attribute names
             std::map<std::string, std::string> attributeLookup;
+
+            const VkPrimitiveTopology topologyLookup[7] = {
+                VK_PRIMITIVE_TOPOLOGY_POINT_LIST,     // 0, POINTS
+                VK_PRIMITIVE_TOPOLOGY_LINE_LIST,      // 1, LINES
+                VK_PRIMITIVE_TOPOLOGY_LINE_LIST,      // 2, LINE_LOOP, need special handling
+                VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,     // 3, LINE_STRIP
+                VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,  // 4, TRIANGLES
+                VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, // 5, TRIANGLE_STRIP
+                VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN    // 6, TRIANGLE_FAN
+            };
+
+            template<typename T>
+            vsg::ref_ptr<T> getAttribute(const gltf::Attributes& attributes, const std::string& name)
+            {
+                if (auto itr = attributes.values.find(name); itr != attributes.values.end())
+                {
+                    return vsg_accessors[itr->second.value].cast<T>();
+                }
+                else return {};
+            }
 
             virtual void assign_extras(ExtensionsExtras& src, vsg::Object& dest);
             virtual void assign_name_extras(NameExtensionsExtras& src, vsg::Object& dest);
@@ -698,6 +756,9 @@ namespace vsgXchange
             virtual void flattenTransforms(gltf::Node& node, const vsg::dmat4& transform);
 
             virtual bool getTransform(gltf::Node& node, vsg::dmat4& transform);
+
+            virtual void optimizePrimtive(gltf::Primitive& primitive, MeshExtras& extras);
+
 
             virtual vsg::ref_ptr<vsg::Data> createBuffer(vsg::ref_ptr<gltf::Buffer> gltf_buffer);
             virtual vsg::ref_ptr<vsg::Data> createBufferView(vsg::ref_ptr<gltf::BufferView> gltf_bufferView);
@@ -710,7 +771,7 @@ namespace vsgXchange
             virtual vsg::ref_ptr<vsg::DescriptorConfigurator> createPbrMaterial(vsg::ref_ptr<gltf::Material> gltf_material);
             virtual vsg::ref_ptr<vsg::DescriptorConfigurator> createUnlitMaterial(vsg::ref_ptr<gltf::Material> gltf_material);
             virtual vsg::ref_ptr<vsg::DescriptorConfigurator> createMaterial(vsg::ref_ptr<gltf::Material> gltf_material);
-            virtual vsg::ref_ptr<vsg::Node> createMesh(vsg::ref_ptr<gltf::Mesh> gltf_mesh, const MeshExtras& extras = {});
+            virtual vsg::ref_ptr<vsg::Node> createMesh(vsg::ref_ptr<gltf::Mesh> gltf_mesh, MeshExtras& extras);
             virtual vsg::ref_ptr<vsg::Light> createLight(vsg::ref_ptr<gltf::Light> gltf_light);
             virtual vsg::ref_ptr<vsg::Node> createNode(vsg::ref_ptr<gltf::Node> gltf_node, bool jointNode);
             virtual vsg::ref_ptr<vsg::Animation> createAnimation(vsg::ref_ptr<gltf::Animation> gltf_animation);
@@ -718,6 +779,10 @@ namespace vsgXchange
 
             virtual vsg::ref_ptr<vsg::ShaderSet> getOrCreatePbrShaderSet();
             virtual vsg::ref_ptr<vsg::ShaderSet> getOrCreateFlatShaderSet();
+
+            virtual vsg::dbox computeBound(gltf::Mesh& mesh, MeshExtras& extras, std::stack<vsg::dmat4>& matrices);
+            virtual vsg::dbox computeBound(gltf::Node& node, std::stack<vsg::dmat4>& matrices);
+            virtual vsg::dbox computeBound(gltf::Scene& scene, std::stack<vsg::dmat4>& matrices);
 
             virtual vsg::ref_ptr<vsg::Object> createSceneGraph(vsg::ref_ptr<gltf::glTF> in_model, vsg::ref_ptr<const vsg::Options> in_options);
         };

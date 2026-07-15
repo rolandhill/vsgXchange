@@ -268,13 +268,14 @@ void printHelp(std::ostream& out)
     out << "    vsgconv input_filename output_filename\n";
     out << "    vsgconv input_filename_1 input_filename_2 output_filename\n";
     out << "Options:\n";
-    out << "    --features            # list all ReaderWriters and the formats supported\n";
-    out << "    --features <rw_name>  # list formats supported by the specified ReaderWriter\n";
-    out << "    --nc --no-compile     # do not compile shaders to SPIRV\n";
-    out << "    --rgb                 # leave RGB source data in its original form rather than converting to RGBA\n";
-    out << "    --ot <count>          # for loading vsg::OperationThreads with <count> threads.\n";
-    out << "    -s                    # report load time stats\n";
-    out << "    -v --version          # report version\n";
+    out << "    --features              # list all ReaderWriters and the formats supported\n";
+    out << "    --features <rw_name>    # list formats supported by the specified ReaderWriter\n";
+    out << "    --nc --no-compile       # do not compile shaders to SPIRV\n";
+    out << "    --rgb                   # leave RGB source data in its original form rather than converting to RGBA\n";
+    out << "    --ot <count>            # for loading vsg::OperationThreads with <count> threads.\n";
+    out << "    --ss <name> <filename>  # override named ShaderSet with ShaderSet in specified file.\n";
+    out << "    -s                      # report load time stats\n";
+    out << "    -v --version            # report version\n";
 }
 
 int main(int argc, char** argv)
@@ -286,6 +287,17 @@ int main(int argc, char** argv)
 
     // set up defaults and read command line arguments to override them
     vsg::CommandLine arguments(&argc, argv);
+
+    std::string name;
+    vsg::Path shaderSetFilename;
+    while(arguments.read("--ss", name, shaderSetFilename))
+    {
+        if (auto shaderSet = vsg::read_cast<vsg::ShaderSet>(shaderSetFilename, options))
+        {
+            options->shaderSets[name] = shaderSet;
+            vsg::info("assigned shaderSets[", name, "] = ", shaderSet);
+        }
+    }
 
     if (arguments.read({"-h", "--help"}))
     {
