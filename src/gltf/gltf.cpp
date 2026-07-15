@@ -1862,7 +1862,6 @@ bool gltf::readOptions(vsg::Options& options, vsg::CommandLine& arguments) const
     result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_triangles, &options) || result;
     result = arguments.readAndAssign<uint32_t>(gltf::meshlet_max_vertices, &options) || result;
     result = arguments.readAndAssign<float>(gltf::meshlet_fill_weight, &options) || result;
-
     result = arguments.readAndAssign<bool>(gltf::packed_vertices, &options) || result;
 
     return result;

@@ -1283,7 +1283,6 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
         vsg_mesh = group;
     }
 
-
     assign_name_extras(*gltf_mesh, *vsg_mesh);
 
     return vsg_mesh;
@@ -1456,13 +1455,6 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
     {
         indices = vsg_accessors[primitive.indices.value];
     }
-
-#if 0
-    vsg::info("   topology = ", topology);
-    vsg::info("   indices = ", indices);
-    vsg::info("   base = ", base);
-    vsg::info("   xPos = ", xPos);
-#endif
 
     std::vector<unsigned int> original_indices;
 
