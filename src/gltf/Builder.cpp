@@ -1768,11 +1768,11 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
     }
 }
 #else
-void gltf::Builder::optimizePrimtive(gltf::Primitive&, const MeshExtras&)
+void gltf::Builder::optimizePrimtive(gltf::Primitive&, MeshExtras&)
 {
     if (!optimize_mesh && !build_meshlets && !build_spatial_meshlets) return;
 
-    vsg::warn("optimizePrimtive("..") NOT SUPPORTED.");
+    vsg::warn("optimizePrimtive(\"..\") NOT SUPPORTED.");
 }
 #endif
 
