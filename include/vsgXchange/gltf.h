@@ -757,7 +757,7 @@ namespace vsgXchange
 
             virtual bool getTransform(gltf::Node& node, vsg::dmat4& transform);
 
-            virtual void optimizePrimtive(gltf::Primitive& primitive, MeshExtras& extras);
+            virtual void optimizePrimitive(gltf::Primitive& primitive, MeshExtras& extras);
 
 
             virtual vsg::ref_ptr<vsg::Data> createBuffer(vsg::ref_ptr<gltf::Buffer> gltf_buffer);
