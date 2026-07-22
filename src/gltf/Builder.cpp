@@ -817,7 +817,7 @@ vsg::ref_ptr<vsg::Node> gltf::Builder::createMesh(vsg::ref_ptr<gltf::Mesh> gltf_
 
     for (auto& primitive : gltf_mesh->primitives.values)
     {
-        optimizePrimtive(*primitive, meshExtras);
+        optimizePrimitive(*primitive, meshExtras);
 
         vsg::ref_ptr<vsg::DescriptorConfigurator> vsg_material;
         if (primitive->material)
@@ -1325,11 +1325,11 @@ bool gltf::Builder::getTransform(gltf::Node& node, vsg::dmat4& matrix)
 }
 
 #ifdef vsgXchange_meshoptimizer
-void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& meshExtras)
+void gltf::Builder::optimizePrimitive(gltf::Primitive& primitive, MeshExtras& meshExtras)
 {
     if (!optimize_mesh && !build_meshlets && !build_spatial_meshlets) return;
 
-    vsg::debug("optimizePrimtive(", &primitive, ") optimize_mesh= ", optimize_mesh, ", build_meshlets = ", build_meshlets, " supported.");
+    vsg::debug("optimizePrimitive(", &primitive, ") optimize_mesh= ", optimize_mesh, ", build_meshlets = ", build_meshlets, " supported.");
 
     VkPrimitiveTopology topology = topologyLookup[primitive.mode];
     if (topology < VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST || VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN > VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN)
@@ -1359,7 +1359,7 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
 
         if (array_itr->second.value >= vsg_accessors.size())
         {
-            vsg::warn("gltf::Builder::optimizePrimtive() error in registerPerVertexArray( attrib, vertexIndexRate", attribute_name, "), array index out of range.");
+            vsg::warn("gltf::Builder::optimizePrimitive() error in registerPerVertexArray( attrib, vertexIndexRate", attribute_name, "), array index out of range.");
             return {};
         }
 
@@ -1376,7 +1376,7 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
     }
     else
     {
-        vsg::info("gltf::Builder::optimizePrimtive() : No POSITION array available, incompatible with mesh_optimizer usage.");
+        vsg::info("gltf::Builder::optimizePrimitive() : No POSITION array available, incompatible with mesh_optimizer usage.");
         return;
     }
 
@@ -1768,11 +1768,11 @@ void gltf::Builder::optimizePrimtive(gltf::Primitive& primitive, MeshExtras& mes
     }
 }
 #else
-void gltf::Builder::optimizePrimtive(gltf::Primitive&, MeshExtras&)
+void gltf::Builder::optimizePrimitive(gltf::Primitive&, MeshExtras&)
 {
     if (!optimize_mesh && !build_meshlets && !build_spatial_meshlets) return;
 
-    vsg::warn("optimizePrimtive(\"..\") NOT SUPPORTED.");
+    vsg::warn("optimizePrimitive(\"..\") NOT SUPPORTED.");
 }
 #endif
 
