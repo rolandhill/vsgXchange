@@ -58,6 +58,31 @@ namespace vsgXchange
     inline vsg::vec3 convert(const aiColor3D& v) { return vsg::vec3(v[0], v[1], v[2]); }
     inline vsg::vec4 convert(const aiColor4D& v) { return vsg::vec4(v[0], v[1], v[2], v[3]); }
 
+    // aiMatrix4x4 elements are ai_real, which is double when Assimp is built with ASSIMP_DOUBLE_PRECISION.
+    // The caller passes an already-transposed matrix whose storage order matches vsg's column-major layout,
+    // so building element-wise yields the same result as the single-precision reinterpret cast used previously.
+    inline vsg::dmat4 convert(const aiMatrix4x4& m)
+    {
+        return vsg::dmat4(m.a1, m.a2, m.a3, m.a4,
+                          m.b1, m.b2, m.b3, m.b4,
+                          m.c1, m.c2, m.c3, m.c4,
+                          m.d1, m.d2, m.d3, m.d4);
+    }
+
+    // Read a scalar float material property. Assimp's scalar accessor takes ai_real, which becomes double
+    // when Assimp is built with ASSIMP_DOUBLE_PRECISION; reading via an ai_real temporary binds to that
+    // accessor in both builds (a plain float& would silently bind to the failing template overload).
+    inline bool getValue(const aiMaterial* material, const char* pKey, unsigned int type, unsigned int idx, float& value)
+    {
+        ai_real tmp;
+        if (material->Get(pKey, type, idx, tmp) == AI_SUCCESS)
+        {
+            value = static_cast<float>(tmp);
+            return true;
+        }
+        return false;
+    }
+
     inline VkSamplerAddressMode getWrapMode(aiTextureMapMode mode)
     {
         switch (mode)
@@ -74,7 +99,7 @@ namespace vsgXchange
     inline bool hasAlphaBlend(const aiMaterial* material)
     {
         aiString alphaMode;
-        float opacity = 1.0;
+        ai_real opacity = 1.0;
         if ((material->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS && alphaMode == aiString("BLEND")) || (material->Get(AI_MATKEY_OPACITY, opacity) == AI_SUCCESS && opacity < 1.0))
             return true;
         return false;
@@ -626,20 +651,20 @@ void assimp::Builder::convert(const aiMaterial* material, vsg::DescriptorConfigu
             defines.insert("VSG_WORKFLOW_SPECGLOSS");
             getColor(material, AI_MATKEY_COLOR_DIFFUSE, pbr.diffuseFactor);
 
-            if (material->Get(AI_MATKEY_GLOSSINESS_FACTOR, pbr.specularFactor.a) != AI_SUCCESS)
+            if (!vsgXchange::getValue(material, AI_MATKEY_GLOSSINESS_FACTOR, pbr.specularFactor.a))
             {
-                if (float shininess; material->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
+                if (float shininess; vsgXchange::getValue(material, AI_MATKEY_SHININESS, shininess))
                     pbr.specularFactor.a = shininess / 1000;
             }
         }
         else
         {
-            material->Get(AI_MATKEY_METALLIC_FACTOR, pbr.metallicFactor);
-            material->Get(AI_MATKEY_ROUGHNESS_FACTOR, pbr.roughnessFactor);
+            vsgXchange::getValue(material, AI_MATKEY_METALLIC_FACTOR, pbr.metallicFactor);
+            vsgXchange::getValue(material, AI_MATKEY_ROUGHNESS_FACTOR, pbr.roughnessFactor);
         }
 
         getColor(material, AI_MATKEY_COLOR_EMISSIVE, pbr.emissiveFactor);
-        material->Get(AI_MATKEY_GLTF_ALPHACUTOFF, pbr.alphaMaskCutoff);
+        vsgXchange::getValue(material, AI_MATKEY_GLTF_ALPHACUTOFF, pbr.alphaMaskCutoff);
 
         aiString alphaMode;
         if (material->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS && alphaMode == aiString("OPAQUE"))
@@ -699,24 +724,29 @@ void assimp::Builder::convert(const aiMaterial* material, vsg::DescriptorConfigu
         if (convertedMaterial.blending)
             mat.alphaMask = 0.0f;
 
-        material->Get(AI_MATKEY_GLTF_ALPHACUTOFF, mat.alphaMaskCutoff);
+        vsgXchange::getValue(material, AI_MATKEY_GLTF_ALPHACUTOFF, mat.alphaMaskCutoff);
         getColor(material, AI_MATKEY_COLOR_AMBIENT, mat.ambient);
         const auto diffuseResult = getColor(material, AI_MATKEY_COLOR_DIFFUSE, mat.diffuse);
         const auto emissiveResult = getColor(material, AI_MATKEY_COLOR_EMISSIVE, mat.emissive);
         const auto specularResult = getColor(material, AI_MATKEY_COLOR_SPECULAR, mat.specular);
 
         unsigned int maxValue = 1;
-        float strength = 1.0f;
+        ai_real strength = 1.0f;
         // any factors for other material parameters get multiplied in by AssImp before we see them, but the specular factor is different
         // doing it like this means it's happening after conversion to the target colour space, which is sensible, but not necessarily what old data expects
         if (aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS_STRENGTH, &strength, &maxValue) == AI_SUCCESS)
-            mat.specular *= strength;
+            mat.specular *= static_cast<float>(strength);
 
         maxValue = 1;
-        if (aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS, &mat.shininess, &maxValue) != AI_SUCCESS)
+        // aiGetMaterialFloatArray writes ai_real (double under ASSIMP_DOUBLE_PRECISION), so read into an ai_real temporary.
+        if (ai_real shininess; aiGetMaterialFloatArray(material, AI_MATKEY_SHININESS, &shininess, &maxValue) != AI_SUCCESS)
         {
             mat.shininess = 0.0f;
             mat.specular.set(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+        else
+        {
+            mat.shininess = static_cast<float>(shininess);
         }
 
         if (mat.shininess < 0.01f)
@@ -895,13 +925,40 @@ void assimp::Builder::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
 
     vsg::DataList vertexArrays;
     auto vertices = vsg::vec3Array::create(mesh->mNumVertices);
+#ifdef ASSIMP_DOUBLE_PRECISION
+    // Assimp built with double precision stores aiVector3D as doubles. To carry the vertices into the
+    // single-precision vsg::vec3Array without losing precision on large-coordinate models (e.g. geo-referenced
+    // DXF), subtract the mesh centre before narrowing to float and re-apply it below as a double-precision
+    // translation on an enclosing MatrixTransform.
+    vsg::dbox bounds;
+    for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+    {
+        const auto& v = mesh->mVertices[i];
+        bounds.add(v.x, v.y, v.z);
+    }
+    vsg::dvec3 centre = (bounds.min + bounds.max) * 0.5;
+    for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+    {
+        const auto& v = mesh->mVertices[i];
+        vertices->at(i).set(static_cast<float>(v.x - centre.x), static_cast<float>(v.y - centre.y), static_cast<float>(v.z - centre.z));
+    }
+#else
     std::memcpy(vertices->dataPointer(), mesh->mVertices, mesh->mNumVertices * 12);
+#endif
     config->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, vertices);
 
     if (mesh->mNormals)
     {
         auto normals = vsg::vec3Array::create(mesh->mNumVertices);
+#ifdef ASSIMP_DOUBLE_PRECISION
+        for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+        {
+            const auto& n = mesh->mNormals[i];
+            normals->at(i).set(static_cast<float>(n.x), static_cast<float>(n.y), static_cast<float>(n.z));
+        }
+#else
         std::memcpy(normals->dataPointer(), mesh->mNormals, mesh->mNumVertices * 12);
+#endif
         config->assignArray(vertexArrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, normals);
     }
     else
@@ -981,7 +1038,7 @@ void assimp::Builder::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
             aiMatrix4x4 m = bone->mOffsetMatrix;
             m.Transpose();
 
-            jointSampler->offsetMatrices[i] = vsg::dmat4(vsg::mat4((float*)&m));
+            jointSampler->offsetMatrices[i] = vsgXchange::convert(m);
 
             // vsg::info("    bone[", i, "], bone->mName = ", bone->mName.C_Str());
 
@@ -1081,7 +1138,14 @@ void assimp::Builder::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
 
     config->copyTo(stateGroup, sharedObjects);
 
+#ifdef ASSIMP_DOUBLE_PRECISION
+    // re-apply, in double precision, the mesh centre that was subtracted from the vertices above
+    auto centreTransform = vsg::MatrixTransform::create(vsg::translate(centre));
+    centreTransform->addChild(vid);
+    stateGroup->addChild(centreTransform);
+#else
     stateGroup->addChild(vid);
+#endif
 
     if (material->blending)
     {
@@ -1089,6 +1153,10 @@ void assimp::Builder::convert(const aiMesh* mesh, vsg::ref_ptr<vsg::Node>& node)
         vid->accept(computeBounds);
         vsg::dvec3 center = (computeBounds.bounds.min + computeBounds.bounds.max) * 0.5;
         double radius = vsg::length(computeBounds.bounds.max - computeBounds.bounds.min) * 0.5;
+#ifdef ASSIMP_DOUBLE_PRECISION
+        // vid holds centre-relative vertices, so shift the sort bound back to the mesh's true position
+        center += centre;
+#endif
 
         auto depthSorted = vsg::DepthSorted::create();
         depthSorted->binNumber = 10;
@@ -1315,7 +1383,7 @@ vsg::ref_ptr<vsg::Node> assimp::Builder::visit(const aiNode* node, int depth)
         aiMatrix4x4 m = node->mTransformation;
         m.Transpose();
 
-        auto matrix(vsg::mat4((float*)&m));
+        auto matrix = vsgXchange::convert(m);
         vsg::ref_ptr<vsg::Node> transform;
 
         if (boneTransform)
@@ -1390,7 +1458,7 @@ vsg::ref_ptr<vsg::Node> assimp::Builder::visit(const aiNode* node, int depth)
         aiMatrix4x4 m = node->mTransformation;
         m.Transpose();
 
-        auto transform = vsg::MatrixTransform::create(vsg::dmat4(vsg::mat4((float*)&m)));
+        auto transform = vsg::MatrixTransform::create(vsgXchange::convert(m));
         transform->children = children;
         if (!name.empty()) transform->setValue("name", name);
 
