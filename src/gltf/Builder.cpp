@@ -1772,7 +1772,7 @@ void gltf::Builder::optimizePrimitive(gltf::Primitive&, MeshExtras&)
 {
     if (!optimize_mesh && !build_meshlets && !build_spatial_meshlets) return;
 
-    vsg::warn("optimizePrimitive(\"..\") NOT SUPPORTED.");
+    vsg::warn("gltf::Builder::optimizePrimitive(..) not supported, requires mesh_optimizer dependency.");
 }
 #endif
 
