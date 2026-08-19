@@ -74,6 +74,9 @@ namespace vsgXchange
         static constexpr const char* meshlet_cone_weight = "meshlet_cone_weight";       /// float cone_weight target when building meshlets
         static constexpr const char* packed_vertices = "packed_vertices";               /// pack vertex, normal and texcoord data into interleaved arrays.
 
+        static constexpr const char* shared_objects = "gltf::shared_objects";           /// string, hint whether the scene graph building should use "none", "local" creates a local vsg::SharedObjects for just this load, "inherit" the SharedObjects from vsg::Options.
+                                                                                        /// The default "" inherit's SharedObject if available, otherwise creates a local one.
+
         static constexpr const char* prototype_builder = "gltf::Builder";   /// gltf::Builder prototype cloned for converting gltf::glTF hierachy into VSG scene graph
 
         bool readOptions(vsg::Options& options, vsg::CommandLine& arguments) const override;

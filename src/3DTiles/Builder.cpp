@@ -523,20 +523,31 @@ vsg::ref_ptr<vsg::Object> Tiles3D::Builder::createSceneGraph(vsg::ref_ptr<Tiles3
 
     if (options)
     {
-        sharedObjects = options->sharedObjects;
         operationThreads = options->operationThreads;
         if (operationThreads) options->operationThreads.reset();
     }
 
-    if (!sharedObjects)
+    std::string shared_objects = vsg::value<std::string>("", Tiles3D::shared_objects, options);
+    if (shared_objects=="inherit")
     {
-        options->sharedObjects = sharedObjects = vsg::SharedObjects::create();
+        if (options) sharedObjects = options->sharedObjects;
     }
+    else if (shared_objects=="local")
+    {
+        sharedObjects = vsg::SharedObjects::create();
+    }
+    else if (shared_objects!="none")
+    {
+        if (options) sharedObjects = options->sharedObjects;
+        if (!sharedObjects) sharedObjects = vsg::SharedObjects::create();
+    }
+
+    vsg::debug("Tiles3D::Builder::createSceneGraph(..) shared_objects = ", shared_objects, ", sharedObjects = ", sharedObjects);
 
     if (!shaderSet)
     {
         shaderSet = vsg::createPhysicsBasedRenderingShaderSet(options);
-        sharedObjects->share(shaderSet);
+        if (sharedObjects) sharedObjects->share(shaderSet);
     }
 
     vsg::ref_ptr<vsg::Group> vsg_tileset;
