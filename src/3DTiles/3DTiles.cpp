@@ -888,6 +888,7 @@ bool Tiles3D::readOptions(vsg::Options& options, vsg::CommandLine& arguments) co
     result = arguments.readAndAssign<bool>(Tiles3D::instancing, &options) | result;
     result = arguments.readAndAssign<double>(Tiles3D::pixel_ratio, &options) | result;
     result = arguments.readAndAssign<uint32_t>(Tiles3D::pre_load_level, &options) | result;
+    result = arguments.readAndAssign<std::string>(Tiles3D::shared_objects, &options) | result;
     return result;
 }
 
