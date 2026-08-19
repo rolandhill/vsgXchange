@@ -1772,7 +1772,7 @@ void gltf::Builder::optimizePrimitive(gltf::Primitive&, MeshExtras&)
 {
     if (!optimize_mesh && !build_meshlets && !build_spatial_meshlets) return;
 
-    vsg::warn("optimizePrimitive(\"..\") NOT SUPPORTED.");
+    vsg::warn("gltf::Builder::optimizePrimitive(..) not supported, requires meshoptimizer dependency.");
 }
 #endif
 
@@ -2615,8 +2615,20 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
 
     if (in_options) options = in_options;
 
-    if (options) sharedObjects = options->sharedObjects;
-    if (!sharedObjects) sharedObjects = vsg::SharedObjects::create();
+    std::string shared_objects = vsg::value<std::string>("", gltf::shared_objects, options);
+    if (shared_objects=="inherit")
+    {
+        if (options) sharedObjects = options->sharedObjects;
+    }
+    else if (shared_objects=="local")
+    {
+        sharedObjects = vsg::SharedObjects::create();
+    }
+    else if (shared_objects!="none")
+    {
+        if (options) sharedObjects = options->sharedObjects;
+        if (!sharedObjects) sharedObjects = vsg::SharedObjects::create();
+    }
 
     instanceNodeHint = options ? options->instanceNodeHint : vsg::Options::INSTANCE_NONE;
     cloneAccessors = vsg::value<bool>(cloneAccessors, gltf::clone_accessors, options);
@@ -2634,6 +2646,7 @@ vsg::ref_ptr<vsg::Object> gltf::Builder::createSceneGraph(vsg::ref_ptr<gltf::glT
     meshlet_fill_weight = vsg::value<float>(meshlet_fill_weight, gltf::meshlet_fill_weight, options);
     packed_vertices = vsg::value<bool>(packed_vertices, gltf::packed_vertices, options);
 
+    vsg::debug("gltf::Builder::createSceneGraph(..) shared_objects = ", shared_objects, ", sharedObjects = ", sharedObjects);
 
     // TODO: need to check that the glTF model is suitable for use of InstanceNode/InstanceDraw
 
